@@ -226,10 +226,19 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
     dhcp->secs = htons(0x0);  // Seconds
     dhcp->flags = htons(0x0); // Flags
 
+    for (i = 0; i < HW_ADD_LENGTH; i++)
+    {
+        dhcp->chaddr[i] = localHwAddress[i];    // Client MAC Address
+    }
+
+    dhcp->magicCookie = htonl(0x63825363);  // Magic Cookie
+
+    optionsPtr = dhcp->options;
+
     switch (type) {
         case DHCPDISCOVER:
             // Writing the first 240 bytes of the DHCP frame
-            for (i = 0; i < 4; i++)
+            for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 dhcp->ciaddr[i] = 0x0;  // Client IP
                 dhcp->yiaddr[i] = 0x0;  // Your IP
@@ -237,21 +246,12 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
             }
 
-            for (i = 0; i < HW_ADD_LENGTH; i++)
-            {
-                dhcp->chaddr[i] = localHwAddress[i];    // Client MAC Address
-            }
-
             for (i = 0; i < 192; i++)
             {
                 dhcp->data[i] = 0x0;    // DHCP Data
             }
 
-            dhcp->magicCookie = htonl(0x63825363);  // Magic Cookie
-
             // Writing the options field
-            optionsPtr = dhcp->options;
-
             *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type (Discover)
             *(optionsPtr++) = 0x1;  // Length: 1
             *(optionsPtr++) = 0x1;  // DHCP: Discover (1)
@@ -264,17 +264,18 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             break;
         case DHCPREQUEST:
             // Code for DHCPREQUEST state
-            for (i = 0; i < 4; i++)
+
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                dhcpOfferedIpAdd[i] = dhcp->yiaddr[i];
+            }
+
+            for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 dhcp->ciaddr[i] = 0x0;  // Client IP
                 dhcp->yiaddr[i] = 0x0;  // Your IP
-                dhcp->siaddr[i] = 0x0;  // Server IP
+                // dhcp->siaddr[i] = 0x0;  // Server IP
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
-            }
-
-            for (i = 0; i < HW_ADD_LENGTH; i++)
-            {
-                dhcp->chaddr[i] = localHwAddress[i];    // Client MAC Address
             }
 
             for (i = 0; i < 192; i++)
@@ -282,17 +283,36 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
                 dhcp->data[i] = 0x0;    // DHCP Data
             }
             
-            dhcp->magicCookie = htonl(0x63825363);  // Magic Cookie
-
-            optionsPtr = dhcp->options;
-
             uint8_t *routerIp = getDhcpOption(ether, 0x3, 1000);
+
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                routerIp++;
+                dhcpServerIpAdd[i] = *(routerIp);
+                dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+            }
 
             *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type (Request)
             *(optionsPtr++) = 0x1;  // Length: 1
             *(optionsPtr++) = 0x3;  // DHCP: Request (3)
 
-            while(1);
+            *(optionsPtr++) = 0x32; // Option: (50) DHCP Request IP
+            *(optionsPtr++) = 0x4;  // Length: 4
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                *(optionsPtr++) = dhcpOfferedIpAdd[i];  // DHCP: Request IP
+            }
+
+            *(optionsPtr++) = 0x36; // Option: (54) DHCP Server IP
+            *(optionsPtr++) = 0x4;  // Length: 4
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                *(optionsPtr++) = dhcpServerIpAdd[i];  // DHCP: Server IP
+            }
+
+            *optionsPtr = 0xFF;     // Option End: 255
+
+            // while(1);
 
             break;
         case DHCPDECLINE:
