@@ -286,11 +286,13 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             optionsPtr = dhcp->options;
 
-            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type
+            uint8_t *routerIp = getDhcpOption(ether, 0x3, 1000);
+
+            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type (Request)
             *(optionsPtr++) = 0x1;  // Length: 1
             *(optionsPtr++) = 0x3;  // DHCP: Request (3)
 
-            while (*optionsPtr = 0xFF;)
+            while(1);
 
             break;
         case DHCPDECLINE:
@@ -343,6 +345,22 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
 uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length)
 {
+    uint8_t *optionPtr = (uint8_t*)ether + 282;
+    uint8_t optionLen = 0;
+    while (*optionPtr != 0xFF)
+    {
+        if (*optionPtr == option)
+        {
+            return optionPtr + 1;
+        }
+        else
+        {
+            optionPtr++;
+            optionLen = *optionPtr;
+
+            optionPtr += optionLen + 1;
+        }
+    }
     return 0;
 }
 

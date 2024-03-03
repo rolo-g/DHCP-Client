@@ -497,7 +497,7 @@ int main(void)
     dhcp = (dhcpFrame*)(getUdpData(data));
     uint8_t *optionsPtr = (uint8_t*)dhcp + 240;
 
-    // sendDhcpMessage(data, 3);
+    sendDhcpMessage(data, 3);
 
     while(1);
 
