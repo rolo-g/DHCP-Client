@@ -394,6 +394,7 @@ bool isDhcpAck(etherHeader *ether)
 {
     if (*getDhcpOption(ether, 0x35, NULL) == 3)
     {
+        dhcpState = DHCP_TESTING_IP;
         return true;
     }
     else
@@ -404,6 +405,8 @@ bool isDhcpAck(etherHeader *ether)
 void handleDhcpAck(etherHeader *ether)
 {
     // This here will start the timer and whatnot
+
+    while(1);
 }
 
 // Message requests

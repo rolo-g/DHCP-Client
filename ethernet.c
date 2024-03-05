@@ -487,7 +487,7 @@ int main(void)
     setPinValue(GREEN_LED, 0);
     waitMicrosecond(100000);
 
-    dhcpFrame* dhcp = 0;
+    // Testing from DHCP_DISCOVER to DHCP_ACK
 
     sendDhcpMessage(data, 1);
 
@@ -507,6 +507,8 @@ int main(void)
 
     setPinvalue(BLUE_LED, 0);
     setPinValue(RED_LED, 1);
+
+    handleDhcpAck(data);
 
     while(1);
 
