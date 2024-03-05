@@ -48,7 +48,7 @@
 //  Globals
 // ------------------------------------------------------------------------------
 
-uint32_t xid = 0;
+uint32_t xid = 0x07900000;
 uint32_t leaseSeconds = 0;
 uint32_t leaseT1 = 0;
 uint32_t leaseT2 = 0;
@@ -63,7 +63,7 @@ bool ipConflictDetectionMode = false;
 uint8_t dhcpOfferedIpAdd[4];
 uint8_t dhcpServerIpAdd[4];
 
-uint8_t dhcpState = DHCP_DISABLED;
+uint8_t dhcpState = DHCP_INIT;
 bool    dhcpEnabled = true;
 
 // ------------------------------------------------------------------------------
@@ -211,21 +211,17 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
     udp->destPort = htons(67);
 
     // DHCP Frame
+    // Using wikipedia.org/wiki/Dynamic_Host_Configuration_Protocol#Operation
     dhcpFrame* dhcp = (dhcpFrame*)udp->data;
+    optionsPtr = dhcp->options;
 
-    /************* this is currently setup for a discover message *************/
-
-
-    // These are  the fields common to all DHCP messages
+    // These are  the fields common to all DHCP messages (so far... )
     dhcp->op = 0x1;     // Boot Request
     dhcp->htype = 0x1;  // Ethernet
     dhcp->hlen = 0x6;   // MAC length
     dhcp->hops = 0x0;   // Hops
-    dhcp->xid = htonl(0x07900000 + xid); // Transaction ID
-    xid++;
     dhcp->secs = htons(0x0);  // Seconds
     dhcp->flags = htons(0x0); // Flags
-
     for (i = 0; i < HW_ADD_LENGTH; i++)
     {
         dhcp->chaddr[i] = localHwAddress[i];    // Client MAC Address
@@ -233,11 +229,12 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
     dhcp->magicCookie = htonl(0x63825363);  // Magic Cookie
 
-    optionsPtr = dhcp->options;
-
-    switch (type) {
+    switch (type)
+    {
         case DHCPDISCOVER:
-            // Writing the first 240 bytes of the DHCP frame
+            xid++;
+            dhcp->xid = htonl(xid); // Transaction ID
+
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 dhcp->ciaddr[i] = 0x0;  // Client IP
@@ -246,96 +243,88 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
             }
 
+            // DHCP Data
             for (i = 0; i < 192; i++)
             {
-                dhcp->data[i] = 0x0;    // DHCP Data
+                dhcp->data[i] = 0x0;
             }
 
             // Writing the options field
-            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type (Discover)
+            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type
             *(optionsPtr++) = 0x1;  // Length: 1
             *(optionsPtr++) = 0x1;  // DHCP: Discover (1)
 
             *optionsPtr = 0xFF;     // Option End: 255
 
-            break;
-        case DHCPOFFER:
-            // Code for DHCPOFFER state
+            dhcpState = DHCP_SELECTING;
+
             break;
         case DHCPREQUEST:
-            // Code for DHCPREQUEST state
+            dhcp->xid = htonl(xid); // Transaction ID
 
+            // Store the offered IP address
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 dhcpOfferedIpAdd[i] = dhcp->yiaddr[i];
             }
 
+            // Store the server IP address
+            uint8_t *tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
+
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 dhcp->ciaddr[i] = 0x0;  // Client IP
                 dhcp->yiaddr[i] = 0x0;  // Your IP
-                // dhcp->siaddr[i] = 0x0;  // Server IP
+
+                dhcpServerIpAdd[i] = *tempServerIpAddPtr;
+                dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                tempServerIpAddPtr++;
+
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
             }
 
+            // DHCP Data
             for (i = 0; i < 192; i++)
             {
-                dhcp->data[i] = 0x0;    // DHCP Data
-            }
-            
-            uint8_t *routerIp = getDhcpOption(ether, 0x3, 1000);
-
-            for (i = 0; i < IP_ADD_LENGTH; i++)
-            {
-                routerIp++;
-                dhcpServerIpAdd[i] = *(routerIp);
-                dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                dhcp->data[i] = 0x0;
             }
 
-            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type (Request)
+            // Writing the options field
+            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type
             *(optionsPtr++) = 0x1;  // Length: 1
             *(optionsPtr++) = 0x3;  // DHCP: Request (3)
 
-            *(optionsPtr++) = 0x32; // Option: (50) DHCP Request IP
+            *(optionsPtr++) = 0x32; // Option: (50) Requested IP Address
             *(optionsPtr++) = 0x4;  // Length: 4
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
-                *(optionsPtr++) = dhcpOfferedIpAdd[i];  // DHCP: Request IP
+                *(optionsPtr++) = dhcpOfferedIpAdd[i];
             }
 
-            *(optionsPtr++) = 0x36; // Option: (54) DHCP Server IP
+            *(optionsPtr++) = 0x36; // Option: (54) DHCP Server Identifier
             *(optionsPtr++) = 0x4;  // Length: 4
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
-                *(optionsPtr++) = dhcpServerIpAdd[i];  // DHCP: Server IP
+                *(optionsPtr++) = dhcpServerIpAdd[i];
             }
 
             *optionsPtr = 0xFF;     // Option End: 255
 
-            // while(1);
+            dhcpState = DHCP_REQUESTING;
 
             break;
         case DHCPDECLINE:
-            // Code for DHCPDECLINE state
-            break;
-        case DHCPACK:
-            // Code for DHCPACK state
-            break;
-        case DHCPNAK:
-            // Code for DHCPNAK state
+            // TODO: Add code
             break;
         case DHCPRELEASE:
-            // Code for DHCPRELEASE state
+            // TODO: Add code
             break;
         case DHCPINFORM:
-            // Code for DHCPINFORM state
+            // TODO: Add code
             break;
         default:
-            // Code for unknown state
             break;
     }
-
-    /****************** end of setup for a discover message ******************/
 
     // adjust lengths
     dhcpLength = sizeof(udpHeader) + sizeof(dhcpFrame) + sizeof(uint8_t)*((optionsPtr + 1) - dhcp->options);
@@ -366,19 +355,21 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length)
 {
     uint8_t *optionPtr = (uint8_t*)ether + 282;
-    uint8_t optionLen = 0;
+    uint8_t tempLen = 0;
+
     while (*optionPtr != 0xFF)
     {
         if (*optionPtr == option)
         {
-            return optionPtr + 1;
+            *length = optionPtr + 1;
+            return optionPtr + 2;
         }
         else
         {
             optionPtr++;
-            optionLen = *optionPtr;
+            tempLen = *optionPtr;
 
-            optionPtr += optionLen + 1;
+            optionPtr += tempLen + 1;
         }
     }
     return 0;
@@ -388,21 +379,31 @@ uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length)
 // Must be a UDP packet
 bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 {
-    bool ok;
-    return ok;
+    uint16_t src = ntohs(*(uint16_t *)((uint8_t *)ether + 34));
+    uint16_t dst = ntohs(*(uint16_t *)((uint8_t *)ether + 36));
+
+    if ((src == 67) && (dst == 68) && (*getDhcpOption(ether, 0x35, NULL) == 2))
+        return true;
+    else
+        return false;
 }
 
-// Determines whether packet is DHCP ACK response to DHCP request
+// Determines whether packet is DHCP ACK response to DHCP request`
 // Must be a UDP packet
 bool isDhcpAck(etherHeader *ether)
 {
-    bool ok;
-    return ok;
+    if (*getDhcpOption(ether, 0x35, NULL) == 3)
+    {
+        return true;
+    }
+    else
+        return false;
 }
 
 // Handle a DHCP ACK
 void handleDhcpAck(etherHeader *ether)
 {
+    // This here will start the timer and whatnot
 }
 
 // Message requests

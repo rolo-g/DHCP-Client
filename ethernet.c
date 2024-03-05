@@ -490,14 +490,23 @@ int main(void)
     dhcpFrame* dhcp = 0;
 
     sendDhcpMessage(data, 1);
-    waitMicrosecond(1e6);
 
-    getEtherPacket(data, MAX_PACKET_SIZE);
+    while(!isDhcpOffer(data, NULL))
+    {
+        getEtherPacket(data, MAX_PACKET_SIZE);
+    }
 
-    dhcp = (dhcpFrame*)(getUdpData(data));
-    uint8_t *optionsPtr = (uint8_t*)dhcp + 240;
+    setPinValue(BLUE_LED, 1);
 
     sendDhcpMessage(data, 3);
+
+    while(!isDhcpAck(data))
+    {
+        getEtherPacket(data, MAX_PACKET_SIZE);
+    }
+
+    setPinvalue(BLUE_LED, 0);
+    setPinValue(RED_LED, 1);
 
     while(1);
 
