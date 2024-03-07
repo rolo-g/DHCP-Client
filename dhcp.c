@@ -61,7 +61,6 @@ bool requestNeeded = true;
 bool releaseNeeded = true;
 
 bool ipConflictDetectionMode = false;
-bool ipConflictNotDetected = true;
 
 uint8_t dhcpOfferedIpAdd[4];
 uint8_t dhcpServerIpAdd[4];
@@ -144,7 +143,7 @@ void releaseDhcp()
 
 void callbackDhcpIpConflictWindow()
 {
-    ipConflictNotDetected = false;
+    setDhcpState(DHCP_BOUND);
 }
 
 void requestDhcpIpConflictTest()
@@ -261,7 +260,7 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             *optionsPtr = 0xFF;     // Option End: 255
 
-            dhcpState = DHCP_SELECTING;
+            setDhcpState(DHCP_SELECTING);
 
             break;
         case DHCPREQUEST:
@@ -315,7 +314,7 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             *optionsPtr = 0xFF;     // Option End: 255
 
-            dhcpState = DHCP_REQUESTING;
+            setDhcpState(DHCP_REQUESTING);
 
             break;
         case DHCPDECLINE:
@@ -391,7 +390,9 @@ bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 
     // makes sure that src and dst are vlaid, and that dhcp message type is 2
     if ((src == 67) && (dst == 68) && (*getDhcpOption(ether, 0x35, NULL) == 2))
+    {
         return true;
+    }
     else
         return false;
 }
@@ -412,7 +413,7 @@ void handleDhcpAck(etherHeader *ether)
 {
     // Records IP address, lease time, and server IP address
 
-    dhcpState = DHCP_BOUND;
+    setDhcpState(DHCP_BOUND);
 }
 
 // Message requests
@@ -456,27 +457,22 @@ void sendDhcpPendingMessages(etherHeader *ether)
             getEtherPacket(ether, MAX_PACKET_SIZE);
             if(isDhcpAck(ether))
             {
+                handleDhcpAck(ether);
                 if(isDhcpIpConflictDetectionMode())
                 {
                     requestDhcpIpConflictTest();
                 }
                 else
                 {
-                    handleDhcpAck(ether);
+                    setDhcpState(DHCP_BOUND);
                 }
             }
             break;
         case DHCP_TESTING_IP:
-            if (ipConflictNotDetected)
-            {
-                
-            }
-            else
-            {
-                handleDhcpAck(ether);
-            }
+
             break;
         case DHCP_BOUND:
+            while(1);
             break;
         case DHCP_RENEWING:
             break;
