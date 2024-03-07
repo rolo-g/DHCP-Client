@@ -492,15 +492,7 @@ int main(void)
     setPinValue(GREEN_LED, 0);
     waitMicrosecond(100000);
 
-    // Testing los timers
     /*
-    startPeriodicTimer(timerTest, 2);
-
-    togglePinValue(BLUE_LED);
-
-    while(true);
-    */
-
     // Testing from DHCP_DISCOVER to DHCP_ACK
     
     sendDhcpMessage(data, 1);
@@ -524,7 +516,13 @@ int main(void)
 
     // handleDhcpAck(data);
 
-    while(1);
+    while(true);
+    */
+
+    while(true)
+    {
+        sendDhcpPendingMessages(data);
+    }
 
     /*
     // Main Loop

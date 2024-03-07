@@ -44,6 +44,8 @@
 #define DHCP_INITREBOOT 8 // not used since ip not stored over reboot
 #define DHCP_REBOOTING  9 // not used since ip not stored over reboot
 
+#define MAX_PACKET_SIZE 1518
+
 // ------------------------------------------------------------------------------
 //  Globals
 // ------------------------------------------------------------------------------
@@ -54,11 +56,12 @@ uint32_t leaseT1 = 0;
 uint32_t leaseT2 = 0;
 
 // use these variables if you want
-bool discoverNeeded = false;
-bool requestNeeded = false;
-bool releaseNeeded = false;
+bool discoverNeeded = true;
+bool requestNeeded = true;
+bool releaseNeeded = true;
 
 bool ipConflictDetectionMode = false;
+bool ipConflictNotDetected = true;
 
 uint8_t dhcpOfferedIpAdd[4];
 uint8_t dhcpServerIpAdd[4];
@@ -101,7 +104,7 @@ void requestDhcpNewAddress()
 // Renew functions
 
 void renewDhcp()
-{
+{ 
 }
 
 void callbackDhcpT1PeriodicTimer()
@@ -141,6 +144,7 @@ void releaseDhcp()
 
 void callbackDhcpIpConflictWindow()
 {
+    ipConflictNotDetected = false;
 }
 
 void requestDhcpIpConflictTest()
@@ -397,43 +401,91 @@ bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 bool isDhcpAck(etherHeader *ether)
 {
     if (*getDhcpOption(ether, 0x35, NULL) == 3)
-    {
-        dhcpState = DHCP_TESTING_IP;
         return true;
-    }
     else
         return false;
 }
 
 // Handle a DHCP ACK
+
 void handleDhcpAck(etherHeader *ether)
 {
     // Records IP address, lease time, and server IP address
 
-    // if conflict enabled, send if not just set them
-
-    // while(
+    dhcpState = DHCP_BOUND;
 }
 
 // Message requests
 
 bool isDhcpDiscoverNeeded()
 {
-    return false;
+    return discoverNeeded;
 }
 
 bool isDhcpRequestNeeded()
 {
-    return false;
+    return requestNeeded;
 }
 
 bool isDhcpReleaseNeeded()
 {
-    return false;
+    return releaseNeeded;
 }
 
 void sendDhcpPendingMessages(etherHeader *ether)
 {
+    switch (dhcpState)
+    {
+        case DHCP_INIT:
+            if (isDhcpDiscoverNeeded())
+            {
+                sendDhcpMessage(ether, DHCPDISCOVER);
+            }
+            break;
+        case DHCP_SELECTING:
+            if (isDhcpRequestNeeded())
+            {
+                getEtherPacket(ether, MAX_PACKET_SIZE);
+                if(isDhcpOffer(ether, NULL))
+                {
+                    sendDhcpMessage(ether, DHCPREQUEST);
+                }
+            }
+            break;
+        case DHCP_REQUESTING:
+            getEtherPacket(ether, MAX_PACKET_SIZE);
+            if(isDhcpAck(ether))
+            {
+                if(isDhcpIpConflictDetectionMode())
+                {
+                    requestDhcpIpConflictTest();
+                }
+                else
+                {
+                    handleDhcpAck(ether);
+                }
+            }
+            break;
+        case DHCP_TESTING_IP:
+            if (ipConflictNotDetected)
+            {
+                
+            }
+            else
+            {
+                handleDhcpAck(ether);
+            }
+            break;
+        case DHCP_BOUND:
+            break;
+        case DHCP_RENEWING:
+            break;
+        case DHCP_REBINDING:
+
+        default:
+            break;
+    
+    }
 }
 
 void processDhcpResponse(etherHeader *ether)
@@ -448,14 +500,16 @@ void processDhcpArpResponse(etherHeader *ether)
 
 void enableDhcp()
 {
+    dhcpEnabled = true;
 }
 
 void disableDhcp()
 {
+    dhcpEnabled = true;
 }
 
 bool isDhcpEnabled()
 {
-    return false;
+    return dhcpEnabled;
 }
 
