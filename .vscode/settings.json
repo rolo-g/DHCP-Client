@@ -3,6 +3,7 @@
         "stdint.h": "c",
         "udp.h": "c",
         "compare": "c",
-        "type_traits": "c"
+        "type_traits": "c",
+        "tm4c123gh6pm.h": "c"
     }
 }

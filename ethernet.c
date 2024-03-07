@@ -519,6 +519,7 @@ int main(void)
     while(true);
     */
 
+    getEtherPacket(data, MAX_PACKET_SIZE);
     while(true)
     {
         sendDhcpPendingMessages(data);

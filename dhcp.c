@@ -149,7 +149,7 @@ void callbackDhcpIpConflictWindow()
 void requestDhcpIpConflictTest()
 {
     // send the ARP message and starts timer
-    startOneshotTimer(callbackDhcpIpConflictWindow, 15);
+    startOneshotTimer(callbackDhcpIpConflictWindow, 5);
     setDhcpState(DHCP_TESTING_IP);
 }
 
@@ -493,6 +493,7 @@ void sendDhcpPendingMessages(etherHeader *ether)
             }
             break;
         case DHCP_BOUND:
+            (*((volatile uint32_t *)0x400253FC)) |= 0x04;
             while(1);
             break;
         case DHCP_RENEWING:
