@@ -60,7 +60,7 @@ bool discoverNeeded = true;
 bool requestNeeded = true;
 bool releaseNeeded = true;
 
-bool ipConflictDetectionMode = false;
+bool ipConflictDetectionMode = true;
 
 uint8_t dhcpOfferedIpAdd[4];
 uint8_t dhcpServerIpAdd[4];
@@ -149,6 +149,8 @@ void callbackDhcpIpConflictWindow()
 void requestDhcpIpConflictTest()
 {
     // send the ARP message and starts timer
+    startOneshotTimer(callbackDhcpIpConflictWindow, 15);
+    setDhcpState(DHCP_TESTING_IP);
 }
 
 bool isDhcpIpConflictDetectionMode()
@@ -266,11 +268,13 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
         case DHCPREQUEST:
             dhcp->xid = htonl(xid); // Transaction ID
 
+            /*
             // Store the offered IP address
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 dhcpOfferedIpAdd[i] = dhcp->yiaddr[i];
             }
+            */
 
             // Store the server IP address
             uint8_t *tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
@@ -391,6 +395,12 @@ bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
     // makes sure that src and dst are vlaid, and that dhcp message type is 2
     if ((src == 67) && (dst == 68) && (*getDhcpOption(ether, 0x35, NULL) == 2))
     {
+        uint8_t i;
+        // Store the offered IP address
+        for (i = 0; i < IP_ADD_LENGTH; i++)
+        {
+            dhcpOfferedIpAdd[i] = *(uint8_t *)((uint8_t *)ether + 58 + i);
+        }
         return true;
     }
     else
@@ -438,16 +448,18 @@ void sendDhcpPendingMessages(etherHeader *ether)
     switch (dhcpState)
     {
         case DHCP_INIT:
+            // if timer hasn't hit 15 seconds again
             if (isDhcpDiscoverNeeded())
             {
                 sendDhcpMessage(ether, DHCPDISCOVER);
             }
             break;
         case DHCP_SELECTING:
+            // if timer something
             if (isDhcpRequestNeeded())
             {
                 getEtherPacket(ether, MAX_PACKET_SIZE);
-                if(isDhcpOffer(ether, NULL))
+                if(isDhcpOffer(ether, dhcpOfferedIpAdd))
                 {
                     sendDhcpMessage(ether, DHCPREQUEST);
                 }
@@ -460,16 +472,25 @@ void sendDhcpPendingMessages(etherHeader *ether)
                 handleDhcpAck(ether);
                 if(isDhcpIpConflictDetectionMode())
                 {
+                    // sends ARP response to offered address
+                    uint8_t blankIp[4] = {0, 0, 0, 0};
+                    sendArpRequest(ether, blankIp, dhcpOfferedIpAdd);
+                    // starts the ip conflict test
                     requestDhcpIpConflictTest();
                 }
                 else
                 {
+                    // immediately go to bound state if no detection needed
                     setDhcpState(DHCP_BOUND);
                 }
             }
             break;
         case DHCP_TESTING_IP:
-
+            getEtherPacket(ether, MAX_PACKET_SIZE);
+            if (isArpResponse(ether));
+            {
+                processDhcpArpResponse(ether);
+            }
             break;
         case DHCP_BOUND:
             while(1);
@@ -490,6 +511,7 @@ void processDhcpResponse(etherHeader *ether)
 
 void processDhcpArpResponse(etherHeader *ether)
 {
+    // this will clear offer and send a decline message
 }
 
 // DHCP control functions
