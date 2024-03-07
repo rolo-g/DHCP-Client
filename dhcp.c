@@ -153,6 +153,7 @@ void requestDhcpIpConflictTest()
     setDhcpState(DHCP_TESTING_IP);
 }
 
+// TODO: Everything
 bool isDhcpIpConflictDetectionMode()
 {
     return ipConflictDetectionMode;
@@ -160,6 +161,7 @@ bool isDhcpIpConflictDetectionMode()
 
 // Lease functions
 
+// TODO: Everything
 uint32_t getDhcpLeaseSeconds()
 {
     return leaseSeconds;
@@ -386,6 +388,7 @@ uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length)
 
 // Determines whether packet is DHCP offer response to DHCP discover
 // Must be a UDP packet
+// TODO: Add more checks
 bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 {
     // these two directly point to the src and dst values of the udp packet
@@ -418,7 +421,7 @@ bool isDhcpAck(etherHeader *ether)
 }
 
 // Handle a DHCP ACK
-
+// TODO: Record remaining stuff
 void handleDhcpAck(etherHeader *ether)
 {
     // Records IP address, lease time, and server IP address
@@ -443,6 +446,7 @@ bool isDhcpReleaseNeeded()
     return releaseNeeded;
 }
 
+// TODO: Finish all states
 void sendDhcpPendingMessages(etherHeader *ether)
 {
     switch (dhcpState)
@@ -506,10 +510,12 @@ void sendDhcpPendingMessages(etherHeader *ether)
     }
 }
 
+// TODO: Everything
 void processDhcpResponse(etherHeader *ether)
 {
 }
 
+// TODO: Everything
 void processDhcpArpResponse(etherHeader *ether)
 {
     // this will clear offer and send a decline message
