@@ -145,6 +145,7 @@ void callbackDhcpIpConflictWindow()
 
 void requestDhcpIpConflictTest()
 {
+    // send the ARP message and starts timer
 }
 
 bool isDhcpIpConflictDetectionMode()
@@ -352,24 +353,25 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
     putEtherPacket(ether, sizeof(etherHeader) + ipHeaderLength + dhcpLength);
 }
 
+// very complicated and difficult function
 uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length)
 {
-    uint8_t *optionPtr = (uint8_t*)ether + 282;
-    uint8_t tempLen = 0;
+    uint8_t *optionPtr = (uint8_t*)ether + 282; // start of options field
+    uint8_t tempLen = 0; // used to skip over unwanted options
 
-    while (*optionPtr != 0xFF)
+    while (*optionPtr != 0xFF) // while DHCP: End (0xFF) not found
     {
         if (*optionPtr == option)
         {
-            *length = optionPtr + 1;
-            return optionPtr + 2;
+            *length = *(optionPtr + 1); // not sure why this has a warning
+            return optionPtr + 2; // returns the start of the option data
         }
         else
         {
-            optionPtr++;
-            tempLen = *optionPtr;
+            optionPtr++; // points to the length field
+            tempLen = *optionPtr; // sets value of length
 
-            optionPtr += tempLen + 1;
+            optionPtr += tempLen + 1; // offsets option ptr by lengh + 1
         }
     }
     return 0;
@@ -379,16 +381,18 @@ uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length)
 // Must be a UDP packet
 bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 {
+    // these two directly point to the src and dst values of the udp packet
     uint16_t src = ntohs(*(uint16_t *)((uint8_t *)ether + 34));
     uint16_t dst = ntohs(*(uint16_t *)((uint8_t *)ether + 36));
 
+    // makes sure that src and dst are vlaid, and that dhcp message type is 2
     if ((src == 67) && (dst == 68) && (*getDhcpOption(ether, 0x35, NULL) == 2))
         return true;
     else
         return false;
 }
 
-// Determines whether packet is DHCP ACK response to DHCP request`
+// Determines whether packet is DHCP ACK response to DHCP request
 // Must be a UDP packet
 bool isDhcpAck(etherHeader *ether)
 {
@@ -404,9 +408,11 @@ bool isDhcpAck(etherHeader *ether)
 // Handle a DHCP ACK
 void handleDhcpAck(etherHeader *ether)
 {
-    // This here will start the timer and whatnot
+    // Records IP address, lease time, and server IP address
 
-    while(1);
+    // if conflict enabled, send if not just set them
+
+    // while(
 }
 
 // Message requests

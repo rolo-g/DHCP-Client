@@ -445,6 +445,11 @@ void processShell()
     }
 }
 
+void timerTest()
+{
+    togglePinValue(BLUE_LED);
+}
+
 //-----------------------------------------------------------------------------
 // Main
 //-----------------------------------------------------------------------------
@@ -468,7 +473,7 @@ int main(void)
     setUart0BaudRate(115200, 40e6);
 
     // Init timer
-    // initTimer();
+    initTimer();
 
     // Init sockets
     initSockets();
@@ -487,8 +492,17 @@ int main(void)
     setPinValue(GREEN_LED, 0);
     waitMicrosecond(100000);
 
-    // Testing from DHCP_DISCOVER to DHCP_ACK
+    // Testing los timers
+    /*
+    startPeriodicTimer(timerTest, 2);
 
+    togglePinValue(BLUE_LED);
+
+    while(true);
+    */
+
+    // Testing from DHCP_DISCOVER to DHCP_ACK
+    
     sendDhcpMessage(data, 1);
 
     while(!isDhcpOffer(data, NULL))
@@ -505,10 +519,10 @@ int main(void)
         getEtherPacket(data, MAX_PACKET_SIZE);
     }
 
-    setPinvalue(BLUE_LED, 0);
+    setPinValue(BLUE_LED, 0);
     setPinValue(RED_LED, 1);
 
-    handleDhcpAck(data);
+    // handleDhcpAck(data);
 
     while(1);
 
