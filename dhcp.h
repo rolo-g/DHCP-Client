@@ -54,6 +54,7 @@ typedef struct _dhcpFrame // 240 or more bytes
 
 bool isDhcpResponse(etherHeader *ether);
 
+// TODO: Remove getOption
 uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length);
 
 void sendDhcpPendingMessages(etherHeader *ether);
