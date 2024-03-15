@@ -60,7 +60,7 @@ bool discoverNeeded = true;
 bool requestNeeded = true;
 bool releaseNeeded = true;
 
-bool ipConflictDetectionMode = true;
+bool ipConflictDetectionMode = false;
 
 uint8_t dhcpOfferedIpAdd[4];
 uint8_t dhcpServerIpAdd[4];
@@ -91,6 +91,8 @@ uint8_t getDhcpState()
 // New address functions
 // Manually requested at start-up
 // Discover messages sent every 15 seconds
+
+// TODO: All of these
 
 void callbackDhcpGetNewAddressTimer()
 {
@@ -153,7 +155,6 @@ void requestDhcpIpConflictTest()
     setDhcpState(DHCP_TESTING_IP);
 }
 
-// TODO: Everything
 bool isDhcpIpConflictDetectionMode()
 {
     return ipConflictDetectionMode;
@@ -161,7 +162,6 @@ bool isDhcpIpConflictDetectionMode()
 
 // Lease functions
 
-// TODO: Everything
 uint32_t getDhcpLeaseSeconds()
 {
     return leaseSeconds;
@@ -324,13 +324,13 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             break;
         case DHCPDECLINE:
-            // TODO: Add code
+            // TODO: Decline code
             break;
         case DHCPRELEASE:
-            // TODO: Add code
+            // TODO: Release code
             break;
         case DHCPINFORM:
-            // TODO: Add code
+            // TODO: Inform code
             break;
         default:
             break;
@@ -388,7 +388,7 @@ uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length)
 
 // Determines whether packet is DHCP offer response to DHCP discover
 // Must be a UDP packet
-// TODO: Add more checks
+// TODO: More offer checks
 bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 {
     // these two directly point to the src and dst values of the udp packet
@@ -414,17 +414,36 @@ bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 // Must be a UDP packet
 bool isDhcpAck(etherHeader *ether)
 {
-    if (*getDhcpOption(ether, 0x35, NULL) == 3)
+    if (*getDhcpOption(ether, 0x35, NULL) == 5)
         return true;
     else
         return false;
 }
 
 // Handle a DHCP ACK
-// TODO: Record remaining stuff
+// TODO: handleAck cleanup
 void handleDhcpAck(etherHeader *ether)
 {
     // Records IP address, lease time, and server IP address
+    uint8_t op = *getDhcpOption(ether, 0x35, NULL);
+    uint8_t *subPtr = getDhcpOption(ether, 0x1, NULL);
+    uint8_t dnsLen = 0;
+    uint8_t *dnsPtr = getDhcpOption(ether, 0x6, &dnsLen);
+    uint8_t *gwPtr = getDhcpOption(ether, 0x3, &dnsLen);
+
+    setIpAddress(dhcpOfferedIpAdd);
+    setIpSubnetMask(subPtr);
+    setIpGatewayAddress(gwPtr);
+    if (dnsPtr)
+        setIpDnsAddress(dnsPtr);
+    else
+        setIpDnsAddress(dhcpServerIpAdd);
+
+    leaseSeconds = *getDhcpOption(ether, 0x33, NULL) / 2;
+    leaseT1 = leaseSeconds / 2;
+    leaseT2 = leaseSeconds * (7/8);
+
+    startPeriodicTimer(callbackDhcpT1PeriodicTimer, leaseT1);
 
     setDhcpState(DHCP_BOUND);
 }
@@ -453,6 +472,7 @@ void sendDhcpPendingMessages(etherHeader *ether)
     {
         case DHCP_INIT:
             // if timer hasn't hit 15 seconds again
+            // TODO: Add discover timer
             if (isDhcpDiscoverNeeded())
             {
                 sendDhcpMessage(ether, DHCPDISCOVER);
@@ -486,6 +506,7 @@ void sendDhcpPendingMessages(etherHeader *ether)
                 {
                     // immediately go to bound state if no detection needed
                     setDhcpState(DHCP_BOUND);
+                    break;
                 }
             }
             break;
@@ -510,12 +531,12 @@ void sendDhcpPendingMessages(etherHeader *ether)
     }
 }
 
-// TODO: Everything
+// TODO: DhcpResponse code
 void processDhcpResponse(etherHeader *ether)
 {
 }
 
-// TODO: Everything
+// TODO: DhcpArpResponce code
 void processDhcpArpResponse(etherHeader *ether)
 {
     // this will clear offer and send a decline message

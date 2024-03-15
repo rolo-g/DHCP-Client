@@ -525,6 +525,7 @@ int main(void)
         sendDhcpPendingMessages(data);
     }
 
+    // TODO: Uncomment main
     /*
     // Main Loop
     // RTOS and interrupts would greatly improve this code,
