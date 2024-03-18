@@ -329,12 +329,12 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
-                // if (getDhcpState() == DHCP_RENEWING)
-                    dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
                 /*
-                else
-                    dhcp->ciaddr[i] = 0x0;  // Client IP
+                if (getDhcpState() == DHCP_RENEWING)
+                    dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
                 */
+                // else
+                    dhcp->ciaddr[i] = 0x0;  // Client IP
 
                 dhcp->yiaddr[i] = 0x0;  // Your IP
 
