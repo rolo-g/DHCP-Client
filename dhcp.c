@@ -1,5 +1,7 @@
-// Modified DHCP (client) Library for CSE 4352 Project 1 & 2
-// Rolando Rosales 1001850424
+/*
+ * Modified DHCP (client) Library for CSE 4352 Project 1 & 2
+ * Rolando Rosales 1001850424
+*/
 
 // DHCP Library
 // Jason Losh
@@ -46,7 +48,6 @@
 
 #define MAX_PACKET_SIZE 1518
 
-// debug led colors
 #define RED 1
 #define GREEN 2
 #define BLUE 3
