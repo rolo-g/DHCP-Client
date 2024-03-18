@@ -176,11 +176,7 @@ void releaseDhcp()
 
 void callbackDhcpIpConflictWindow()
 {
-    setDhcpState(DHCP_BOUND);
-    if (!restartTimer(callbackDhcpT1HitTimer))
-        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
-    if (!restartTimer(callbackDhcpT2HitTimer))
-        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
+    startDhcpTimers();
     setDhcpState(DHCP_BOUND);
 }
 
@@ -668,11 +664,8 @@ void sendDhcpPendingMessages(etherHeader *ether)
                 else
                 {
                     // immediately go to bound state if no detection needed
+                    startDhcpTimers();
                     setDhcpState(DHCP_BOUND);
-                    if (!restartTimer(callbackDhcpT1HitTimer))
-                        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
-                    if (!restartTimer(callbackDhcpT2HitTimer))
-                        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
                 }
             }
             break;
@@ -728,6 +721,10 @@ void processDhcpArpResponse(etherHeader *ether)
     leaseSeconds = 0;
     leaseT1 = 0;
     leaseT2 = 0;
+
+    discoverNeeded = true;
+    requestNeeded = false;
+    releaseNeeded = false;
 
     setDhcpState(DHCP_INIT);
 }
