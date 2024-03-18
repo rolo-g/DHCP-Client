@@ -517,16 +517,14 @@ int main(void)
     // handleDhcpAck(data);
 
     while(true);
-    */
 
     getEtherPacket(data, MAX_PACKET_SIZE);
     while(true)
     {
         sendDhcpPendingMessages(data);
     }
+    */
 
-    // TODO: Uncomment main
-    /*
     // Main Loop
     // RTOS and interrupts would greatly improve this code,
     // but the goal here is simplicity
@@ -566,7 +564,7 @@ int main(void)
             // TCP active open uses ARP response to get the HW address to establish the socket
             if (isArpResponse(data))
             {
-                processDhcpArpResponse(data);
+                // processDhcpArpResponse(data);
                 processTcpArpResponse(data);
             }
 
@@ -606,13 +604,13 @@ int main(void)
             	// Handle DHCP response
                 else
                 {
+                    /*
                     if (isUdp(data))
                         if (isDhcpResponse(data))
-                            processDhcpResponse(data);
+                            processDhcpResponse(data);*/
                 }
             }
         }
     }
-    */
 }
 

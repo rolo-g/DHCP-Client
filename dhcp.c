@@ -46,6 +46,11 @@
 
 #define MAX_PACKET_SIZE 1518
 
+// debug led colors
+#define RED 1
+#define GREEN 2
+#define BLUE 3
+
 // ------------------------------------------------------------------------------
 //  Globals
 // ------------------------------------------------------------------------------
@@ -57,8 +62,8 @@ uint32_t leaseT2 = 0;
 
 // use these variables if you want
 bool discoverNeeded = true;
-bool requestNeeded = true;
-bool releaseNeeded = true;
+bool requestNeeded = false;
+bool releaseNeeded = false;
 
 bool ipConflictDetectionMode = false;
 
@@ -76,6 +81,18 @@ bool    dhcpEnabled = true;
 // Subroutines
 //-----------------------------------------------------------------------------
 
+// Custon debug functions
+
+void debugLed(uint8_t color)
+{
+    if (color == RED)
+        (*((volatile uint32_t *)0x400253FC)) |= 0x02;
+    if (color == BLUE)
+        (*((volatile uint32_t *)0x400253FC)) |= 0x04;
+    if (color == GREEN)
+        (*((volatile uint32_t *)0x400253FC)) |= 0x08;
+}
+
 // State functions
 
 void setDhcpState(uint8_t state)
@@ -92,47 +109,61 @@ uint8_t getDhcpState()
 // Manually requested at start-up
 // Discover messages sent every 15 seconds
 
-// TODO: All of these
-
 void callbackDhcpGetNewAddressTimer()
 {
+    setDhcpState(DHCP_INIT);
+    discoverNeeded = true;
 }
 
 void requestDhcpNewAddress()
 {
+    startOneshotTimer(callbackDhcpGetNewAddressTimer, 5);
+    discoverNeeded = false;
 }
 
 // Renew functions
 
-void renewDhcp()
-{ 
-}
-
 void callbackDhcpT1PeriodicTimer()
 {
+    requestNeeded = true;
+}
+
+void renewDhcp()
+{
+    setDhcpState(DHCP_RENEWING);
+    startPeriodicTimer(callbackDhcpT1PeriodicTimer, 5);
+    requestNeeded = true;
 }
 
 void callbackDhcpT1HitTimer()
 {
+    renewDhcp();
 }
 
 // Rebind functions
 
-void rebindDhcp()
-{
-}
-
 void callbackDhcpT2PeriodicTimer()
 {
+    requestNeeded = true;
+}
+
+void rebindDhcp()
+{
+    stopTimer(callbackDhcpT1PeriodicTimer);
+    setDhcpState(DHCP_REBINDING);
+    startPeriodicTimer(callbackDhcpT2PeriodicTimer, 5);
+    requestNeeded = true;
 }
 
 void callbackDhcpT2HitTimer()
 {
+    rebindDhcp();
 }
 
 // End of lease timer
 void callbackDhcpLeaseEndTimer()
 {
+    //
 }
 
 // Release functions
@@ -145,6 +176,11 @@ void releaseDhcp()
 
 void callbackDhcpIpConflictWindow()
 {
+    setDhcpState(DHCP_BOUND);
+    if (!restartTimer(callbackDhcpT1HitTimer))
+        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
+    if (!restartTimer(callbackDhcpT2HitTimer))
+        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
     setDhcpState(DHCP_BOUND);
 }
 
@@ -169,10 +205,22 @@ uint32_t getDhcpLeaseSeconds()
 
 // Determines whether packet is DHCP
 // Must be a UDP packet
+// TODO: Evaluate isDhcpResponse
 bool isDhcpResponse(etherHeader* ether)
 {
     bool ok;
     return ok;
+}
+
+// T1, T2, and lease timer startup
+void startDhcpTimers()
+{
+    if (!restartTimer(callbackDhcpT1HitTimer))
+        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
+    if (!restartTimer(callbackDhcpT2HitTimer))
+        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
+    if (!restartTimer(callbackDhcpLeaseEndTimer))
+        startOneshotTimer(callbackDhcpLeaseEndTimer, leaseSeconds);
 }
 
 // Send DHCP message
@@ -229,7 +277,7 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
     dhcp->hlen = 0x6;   // MAC length
     dhcp->hops = 0x0;   // Hops
     dhcp->secs = htons(0x0);  // Seconds
-    dhcp->flags = htons(0x0); // Flags
+
     for (i = 0; i < HW_ADD_LENGTH; i++)
     {
         dhcp->chaddr[i] = localHwAddress[i];    // Client MAC Address
@@ -240,6 +288,7 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
     switch (type)
     {
         case DHCPDISCOVER:
+            dhcp->flags = htons(0x8000); // Flags (Broadcast)
             xid++;
             dhcp->xid = htonl(xid); // Transaction ID
 
@@ -270,25 +319,33 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
         case DHCPREQUEST:
             dhcp->xid = htonl(xid); // Transaction ID
 
-            /*
-            // Store the offered IP address
-            for (i = 0; i < IP_ADD_LENGTH; i++)
-            {
-                dhcpOfferedIpAdd[i] = dhcp->yiaddr[i];
-            }
-            */
+            if (getDhcpState() == DHCP_REBINDING)
+                dhcp->flags = htons(0x8000); // Flags (Broadcast)
+            else
+                dhcp->flags = htons(0x0); // Flags (Unicast)
 
             // Store the server IP address
             uint8_t *tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
 
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
-                dhcp->ciaddr[i] = 0x0;  // Client IP
+                if (getDhcpState() == DHCP_RENEWING)
+                    dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
+                else
+                    dhcp->ciaddr[i] = 0x0;  // Client IP
+
                 dhcp->yiaddr[i] = 0x0;  // Your IP
 
-                dhcpServerIpAdd[i] = *tempServerIpAddPtr;
-                dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
-                tempServerIpAddPtr++;
+                //if (getDhcpState() == DHCP_REBINDING)
+                    dhcp->siaddr[i] = 0x0;  // Server IP
+                /*
+                else
+                {
+                    dhcpServerIpAdd[i] = *tempServerIpAddPtr;
+                    dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                    tempServerIpAddPtr++;
+                }
+                */
 
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
             }
@@ -324,13 +381,95 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             break;
         case DHCPDECLINE:
-            // TODO: Decline code
+            // TODO: Test decline 
+            dhcp->xid = htonl(xid); // Transaction ID
+            dhcp->flags = htons(0x0); // Flags (Unicast)
+
+            // Store the server IP address
+            uint8_t *tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
+
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
+
+                dhcp->yiaddr[i] = 0x0;  // Your IP
+
+                dhcp->siaddr[i] = 0x0;  // Server IP
+
+                dhcp->giaddr[i] = 0x0;  // Gateway IP
+            }
+
+            // DHCP Data
+            for (i = 0; i < 192; i++)
+            {
+                dhcp->data[i] = 0x0;
+            }
+
+            // Writing the options field
+            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type
+            *(optionsPtr++) = 0x1;  // Length: 1
+            *(optionsPtr++) = 0x4;  // DHCP: Decline (4)
+
+            *(optionsPtr++) = 0x32; // Option: (50) Requested IP Address
+            *(optionsPtr++) = 0x4;  // Length: 4
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                *(optionsPtr++) = dhcpOfferedIpAdd[i];
+            }
+
+            *(optionsPtr++) = 0x36; // Option: (54) DHCP Server Identifier
+            *(optionsPtr++) = 0x4;  // Length: 4
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                *(optionsPtr++) = dhcpServerIpAdd[i];
+            }
+
+            *optionsPtr = 0xFF;     // Option End: 255
             break;
         case DHCPRELEASE:
-            // TODO: Release code
+            // TODO: Test release 
+            dhcp->xid = htonl(xid); // Transaction ID
+            dhcp->flags = htons(0x0); // Flags (Unicast)
+
+            // Store the server IP address
+            uint8_t *tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
+
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                dhcp->ciaddr[i] = 0x0;  // Client IP
+
+                dhcp->yiaddr[i] = 0x0;  // Your IP
+
+                dhcpServerIpAdd[i] = *tempServerIpAddPtr;
+                dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                tempServerIpAddPtr++;
+
+                dhcp->giaddr[i] = 0x0;  // Gateway IP
+            }
+
+            // DHCP Data
+            for (i = 0; i < 192; i++)
+            {
+                dhcp->data[i] = 0x0;
+            }
+
+            // Writing the options field
+            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type
+            *(optionsPtr++) = 0x1;  // Length: 1
+            *(optionsPtr++) = 0x7;  // DHCP: Decline (4)
+
+            *(optionsPtr++) = 0x36; // Option: (54) DHCP Server Identifier
+            *(optionsPtr++) = 0x4;  // Length: 4
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                *(optionsPtr++) = dhcpServerIpAdd[i];
+            }
+
+            *optionsPtr = 0xFF;     // Option End: 255
+            
             break;
         case DHCPINFORM:
-            // TODO: Inform code
+            // TODO: Inform msg
             break;
         default:
             break;
@@ -388,7 +527,6 @@ uint8_t* getDhcpOption(etherHeader *ether, uint8_t option, uint8_t* length)
 
 // Determines whether packet is DHCP offer response to DHCP discover
 // Must be a UDP packet
-// TODO: More offer checks
 bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 {
     // these two directly point to the src and dst values of the udp packet
@@ -421,15 +559,16 @@ bool isDhcpAck(etherHeader *ether)
 }
 
 // Handle a DHCP ACK
-// TODO: handleAck cleanup
 void handleDhcpAck(etherHeader *ether)
 {
     // Records IP address, lease time, and server IP address
-    uint8_t op = *getDhcpOption(ether, 0x35, NULL);
+    uint8_t i = 0;
+    uint8_t leaseLen = 0;
+
     uint8_t *subPtr = getDhcpOption(ether, 0x1, NULL);
-    uint8_t dnsLen = 0;
-    uint8_t *dnsPtr = getDhcpOption(ether, 0x6, &dnsLen);
-    uint8_t *gwPtr = getDhcpOption(ether, 0x3, &dnsLen);
+    uint8_t *dnsPtr = getDhcpOption(ether, 0x6, NULL);
+    uint8_t *gwPtr = getDhcpOption(ether, 0x3, NULL);
+    uint8_t *lsPtr = getDhcpOption(ether, 0x33, &leaseLen);
 
     setIpAddress(dhcpOfferedIpAdd);
     setIpSubnetMask(subPtr);
@@ -439,13 +578,15 @@ void handleDhcpAck(etherHeader *ether)
     else
         setIpDnsAddress(dhcpServerIpAdd);
 
-    leaseSeconds = *getDhcpOption(ether, 0x33, NULL) / 2;
+    leaseSeconds = 0;
+
+    for (i = 1; i <= leaseLen; i++)
+    {
+        leaseSeconds += (*lsPtr << (leaseLen - i));
+        lsPtr++;
+    }
     leaseT1 = leaseSeconds / 2;
-    leaseT2 = leaseSeconds * (7/8);
-
-    startPeriodicTimer(callbackDhcpT1PeriodicTimer, leaseT1);
-
-    setDhcpState(DHCP_BOUND);
+    leaseT2 = (leaseSeconds * 7) / 8;
 }
 
 // Message requests
@@ -465,31 +606,27 @@ bool isDhcpReleaseNeeded()
     return releaseNeeded;
 }
 
-// TODO: Finish all states
 void sendDhcpPendingMessages(etherHeader *ether)
 {
     switch (dhcpState)
     {
         case DHCP_INIT:
-            // if timer hasn't hit 15 seconds again
-            // TODO: Add discover timer
             if (isDhcpDiscoverNeeded())
             {
+                requestDhcpNewAddress();
                 sendDhcpMessage(ether, DHCPDISCOVER);
             }
             break;
         case DHCP_SELECTING:
-            // if timer something
-            if (isDhcpRequestNeeded())
+            getEtherPacket(ether, MAX_PACKET_SIZE);
+            if(isDhcpOffer(ether, dhcpOfferedIpAdd))
             {
-                getEtherPacket(ether, MAX_PACKET_SIZE);
-                if(isDhcpOffer(ether, dhcpOfferedIpAdd))
-                {
-                    sendDhcpMessage(ether, DHCPREQUEST);
-                }
+                stopTimer(callbackDhcpGetNewAddressTimer);
+                sendDhcpMessage(ether, DHCPREQUEST);
             }
             break;
         case DHCP_REQUESTING:
+            // TODO: Add ack response timer
             getEtherPacket(ether, MAX_PACKET_SIZE);
             if(isDhcpAck(ether))
             {
@@ -506,11 +643,15 @@ void sendDhcpPendingMessages(etherHeader *ether)
                 {
                     // immediately go to bound state if no detection needed
                     setDhcpState(DHCP_BOUND);
-                    break;
+                    if (!restartTimer(callbackDhcpT1HitTimer))
+                        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
+                    if (!restartTimer(callbackDhcpT2HitTimer))
+                        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
                 }
             }
             break;
         case DHCP_TESTING_IP:
+            // TODO: test testing state
             getEtherPacket(ether, MAX_PACKET_SIZE);
             if (isArpResponse(ether));
             {
@@ -518,28 +659,51 @@ void sendDhcpPendingMessages(etherHeader *ether)
             }
             break;
         case DHCP_BOUND:
-            (*((volatile uint32_t *)0x400253FC)) |= 0x04;
-            while(1);
+            // Doesn't do anything, just waits for timers to hit
+            debugLed(BLUE);
             break;
         case DHCP_RENEWING:
+            if (isDhcpRequestNeeded())
+            {
+                requestNeeded = false;
+                sendDhcpMessage(ether, DHCPREQUEST);
+            }
             break;
         case DHCP_REBINDING:
-
+            if (isDhcpRequestNeeded())
+            {
+                requestNeeded = false;
+                sendDhcpMessage(ether, DHCPREQUEST);
+            }
+            break;
         default:
             break;
     
     }
 }
 
-// TODO: DhcpResponse code
+// TODO: Evaluate processDhcpResponse
+// Could have split up pending message function, but too late now
 void processDhcpResponse(etherHeader *ether)
 {
 }
 
-// TODO: DhcpArpResponce code
 void processDhcpArpResponse(etherHeader *ether)
 {
-    // this will clear offer and send a decline message
+    sendDhcpMessage(ether, DHCPDECLINE);
+
+    uint8_t blank[4] = {0, 0, 0, 0};
+
+    setIpAddress(blank);
+    setIpSubnetMask(blank);
+    setIpGatewayAddress(blank);
+    setIpDnsAddress(blank);
+
+    leaseSeconds = 0;
+    leaseT1 = 0;
+    leaseT2 = 0;
+
+    setDhcpState(DHCP_INIT);
 }
 
 // DHCP control functions
