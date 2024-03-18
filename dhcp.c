@@ -164,39 +164,13 @@ void callbackDhcpT2HitTimer()
 // End of lease timer
 void callbackDhcpLeaseEndTimer()
 {
-    uint8_t blank[4] = {0, 0, 0, 0};
-
-    setIpAddress(blank);
-    setIpSubnetMask(blank);
-    setIpGatewayAddress(blank);
-    setIpDnsAddress(blank);
-
-    leaseSeconds = 0;
-    leaseT1 = 0;
-    leaseT2 = 0;
-
-    discoverNeeded = true;
-    requestNeeded = false;
-    releaseNeeded = false;
-
-    setDhcpState(DHCP_INIT);
+    //
 }
 
 // Release functions
 
 void releaseDhcp()
 {
-}
-
-// T1, T2, and lease timer startup
-void startDhcpTimers()
-{
-    if (!restartTimer(callbackDhcpT1HitTimer))
-        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
-    if (!restartTimer(callbackDhcpT2HitTimer))
-        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
-    if (!restartTimer(callbackDhcpLeaseEndTimer))
-        startOneshotTimer(callbackDhcpLeaseEndTimer, leaseSeconds);
 }
 
 // IP conflict detection
@@ -226,13 +200,24 @@ uint32_t getDhcpLeaseSeconds()
     return leaseSeconds;
 }
 
-// NOT USING
 // Determines whether packet is DHCP
 // Must be a UDP packet
+// TODO: Evaluate isDhcpResponse
 bool isDhcpResponse(etherHeader* ether)
 {
     bool ok;
     return ok;
+}
+
+// T1, T2, and lease timer startup
+void startDhcpTimers()
+{
+    if (!restartTimer(callbackDhcpT1HitTimer))
+        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
+    if (!restartTimer(callbackDhcpT2HitTimer))
+        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
+    if (!restartTimer(callbackDhcpLeaseEndTimer))
+        startOneshotTimer(callbackDhcpLeaseEndTimer, leaseSeconds);
 }
 
 // Send DHCP message
@@ -336,30 +321,33 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             if (getDhcpState() == DHCP_REBINDING)
                 dhcp->flags = htons(0x8000); // Flags (Broadcast)
             else
-                dhcp->flags = htons(0x8000); // Flags (Unicast)
+                dhcp->flags = htons(0x0); // Flags (Unicast)
 
             // Store the server IP address
-            tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
+            uint8_t *tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
 
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
+                /*
                 if (getDhcpState() == DHCP_RENEWING)
-                {
                     dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
-                }
-                else
+                */
+                // else
                     dhcp->ciaddr[i] = 0x0;  // Client IP
 
                 dhcp->yiaddr[i] = 0x0;  // Your IP
 
                 //if (getDhcpState() == DHCP_REBINDING)
                     dhcp->siaddr[i] = 0x0;  // Server IP
-                //else
-                //{
-                    // dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
-                //}
-                // tempServerIpAddPtr++;
-                
+                /*
+                else
+                {
+                    dhcpServerIpAdd[i] = *tempServerIpAddPtr;
+                    dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                    tempServerIpAddPtr++;
+                }
+                */
+
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
             }
 
@@ -396,7 +384,7 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
         case DHCPDECLINE:
             // TODO: Test decline 
             dhcp->xid = htonl(xid); // Transaction ID
-            dhcp->flags = htons(0x8000); // Flags (Unicast)
+            dhcp->flags = htons(0x0); // Flags (Unicast)
 
             // Store the server IP address
             tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
@@ -432,14 +420,14 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 *(optionsPtr++) = dhcpServerIpAdd[i];
-          }
+            }
 
             *optionsPtr = 0xFF;     // Option End: 255
             break;
         case DHCPRELEASE:
             // TODO: Test release 
             dhcp->xid = htonl(xid); // Transaction ID
-            dhcp->flags = htons(0x8000); // Flags (Unicast)
+            dhcp->flags = htons(0x0); // Flags (Unicast)
 
             // Store the server IP address
             tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
@@ -617,17 +605,11 @@ void handleDhcpAck(etherHeader *ether)
 
     leaseSeconds = 0;
 
-    /*
-
     for (i = 1; i <= leaseLen; i++)
     {
         leaseSeconds += (*lsPtr << (leaseLen - i));
         lsPtr++;
     }
-    */
-
-    leaseSeconds = 30;
-
     leaseT1 = leaseSeconds / 2;
     leaseT2 = (leaseSeconds * 7) / 8;
 }
@@ -722,7 +704,7 @@ void sendDhcpPendingMessages(etherHeader *ether)
     }
 }
 
-// NOT USING
+// TODO: Evaluate processDhcpResponse
 // Could have split up pending message function, but too late now
 void processDhcpResponse(etherHeader *ether)
 {
