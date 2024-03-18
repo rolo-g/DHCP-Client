@@ -391,11 +391,8 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
-
                 dhcp->yiaddr[i] = 0x0;  // Your IP
-
                 dhcp->siaddr[i] = 0x0;  // Server IP
-
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
             }
 
@@ -437,7 +434,6 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
                 dhcp->ciaddr[i] = 0x0;  // Client IP
-
                 dhcp->yiaddr[i] = 0x0;  // Your IP
 
                 dhcpServerIpAdd[i] = *tempServerIpAddPtr;
@@ -456,7 +452,7 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             // Writing the options field
             *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type
             *(optionsPtr++) = 0x1;  // Length: 1
-            *(optionsPtr++) = 0x7;  // DHCP: Decline (4)
+            *(optionsPtr++) = 0x7;  // DHCP: Release (7)
 
             *(optionsPtr++) = 0x36; // Option: (54) DHCP Server Identifier
             *(optionsPtr++) = 0x4;  // Length: 4
@@ -469,7 +465,31 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             
             break;
         case DHCPINFORM:
-            // TODO: Inform msg
+            // TODO: Test inform
+            dhcp->flags = htons(0x8000); // Flags (Broadcast)
+            xid++;
+            dhcp->xid = htonl(xid); // Transaction ID
+
+            for (i = 0; i < IP_ADD_LENGTH; i++)
+            {
+                dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
+                dhcp->yiaddr[i] = 0x0;  // Your IP
+                dhcp->siaddr[i] = 0x0;  // Server IP
+                dhcp->giaddr[i] = 0x0;  // Gateway IP
+            }
+
+            // DHCP Data
+            for (i = 0; i < 192; i++)
+            {
+                dhcp->data[i] = 0x0;
+            }
+
+            // Writing the options field
+            *(optionsPtr++) = 0x35; // Option: (53) DHCP Message Type
+            *(optionsPtr++) = 0x1;  // Length: 1
+            *(optionsPtr++) = 0x8;  // DHCP: Inform (8)
+
+            *optionsPtr = 0xFF;     // Option End: 255
             break;
         default:
             break;
