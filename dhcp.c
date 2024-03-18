@@ -329,10 +329,12 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
-                if (getDhcpState() == DHCP_RENEWING)
+                // if (getDhcpState() == DHCP_RENEWING)
                     dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
+                /*
                 else
                     dhcp->ciaddr[i] = 0x0;  // Client IP
+                */
 
                 dhcp->yiaddr[i] = 0x0;  // Your IP
 
@@ -390,7 +392,7 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
-                dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
+                dhcp->ciaddr[i] = 0x0;  // Server IP
                 dhcp->yiaddr[i] = 0x0;  // Your IP
                 dhcp->siaddr[i] = 0x0;  // Server IP
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
@@ -433,12 +435,16 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
-                dhcp->ciaddr[i] = 0x0;  // Client IP
+                dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Client IP
                 dhcp->yiaddr[i] = 0x0;  // Your IP
 
+                /*
                 dhcpServerIpAdd[i] = *tempServerIpAddPtr;
                 dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
                 tempServerIpAddPtr++;
+                */
+
+                dhcp->siaddr[i] = 0x0;  // Server IP
 
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
             }
