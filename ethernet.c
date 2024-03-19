@@ -517,7 +517,9 @@ int main(void)
     // handleDhcpAck(data);
 
     while(true);
+    */
 
+    /*
     getEtherPacket(data, MAX_PACKET_SIZE);
     while(true)
     {
@@ -602,13 +604,12 @@ int main(void)
                     }
                 }
             	// Handle DHCP response
-                else
-                {
-                    /*
-                    if (isUdp(data))
-                        if (isDhcpResponse(data))
-                            processDhcpResponse(data);*/
-                }
+                // else
+                // {
+                    // if (isUdp(data))
+                        // if (isDhcpResponse(data))
+                            // processDhcpResponse(data);
+                // }
             }
         }
     }

@@ -65,14 +65,21 @@ uint32_t leaseT2 = 0;
 bool discoverNeeded = true;
 bool requestNeeded = false;
 bool releaseNeeded = false;
+bool receivedArpResp = true;
 
-bool ipConflictDetectionMode = false;
+bool ipConflictDetectionMode = true;
 
 uint8_t dhcpOfferedIpAdd[4];
 uint8_t dhcpServerIpAdd[4];
 
 uint8_t dhcpState = DHCP_INIT;
 bool    dhcpEnabled = true;
+
+uint8_t tempSub[4];
+uint8_t tempDns[4];
+uint8_t tempGw[4];
+uint8_t tempLs[4];
+uint32_t tempLeaseSecs = 0;
 
 // ------------------------------------------------------------------------------
 //  Structures
@@ -118,7 +125,7 @@ void callbackDhcpGetNewAddressTimer()
 
 void requestDhcpNewAddress()
 {
-    startOneshotTimer(callbackDhcpGetNewAddressTimer, 5);
+    startOneshotTimer(callbackDhcpGetNewAddressTimer, 15);
     discoverNeeded = false;
 }
 
@@ -164,7 +171,22 @@ void callbackDhcpT2HitTimer()
 // End of lease timer
 void callbackDhcpLeaseEndTimer()
 {
-    //
+    uint8_t blank[4] = {0, 0, 0, 0};
+
+    setIpAddress(blank);
+    setIpSubnetMask(blank);
+    setIpGatewayAddress(blank);
+    setIpDnsAddress(blank);
+
+    leaseSeconds = 0;
+    leaseT1 = 0;
+    leaseT2 = 0;
+
+    discoverNeeded = true;
+    requestNeeded = false;
+    releaseNeeded = false;
+
+    setDhcpState(DHCP_INIT);
 }
 
 // Release functions
@@ -173,18 +195,47 @@ void releaseDhcp()
 {
 }
 
+// T1, T2, and lease timer startup
+void startDhcpTimers()
+{
+    if (!restartTimer(callbackDhcpT1HitTimer))
+        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
+    if (!restartTimer(callbackDhcpT2HitTimer))
+        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
+    if (!restartTimer(callbackDhcpLeaseEndTimer))
+        startOneshotTimer(callbackDhcpLeaseEndTimer, leaseSeconds);
+}
+
+void applyDhcpAckValues()
+{
+    setIpAddress(dhcpOfferedIpAdd);
+    setIpSubnetMask(tempSub);
+    setIpGatewayAddress(tempGw);
+    setIpDnsAddress(tempDns);
+
+    leaseSeconds = 0;
+
+    // TODO: Change 30 to temp
+    leaseSeconds = 60;
+    leaseT1 = leaseSeconds / 2;
+    leaseT2 = (leaseSeconds * 7) / 8;
+}
+
 // IP conflict detection
 
 void callbackDhcpIpConflictWindow()
 {
+    applyDhcpAckValues();
     startDhcpTimers();
     setDhcpState(DHCP_BOUND);
 }
 
 void requestDhcpIpConflictTest()
 {
-    // send the ARP message and starts timer
-    startOneshotTimer(callbackDhcpIpConflictWindow, 5);
+    if (!restartTimer(callbackDhcpIpConflictWindow))
+    {
+        startOneshotTimer(callbackDhcpIpConflictWindow, 5);
+    }
     setDhcpState(DHCP_TESTING_IP);
 }
 
@@ -207,17 +258,6 @@ bool isDhcpResponse(etherHeader* ether)
 {
     bool ok;
     return ok;
-}
-
-// T1, T2, and lease timer startup
-void startDhcpTimers()
-{
-    if (!restartTimer(callbackDhcpT1HitTimer))
-        startOneshotTimer(callbackDhcpT1HitTimer, leaseT1);
-    if (!restartTimer(callbackDhcpT2HitTimer))
-        startOneshotTimer(callbackDhcpT2HitTimer, leaseT2);
-    if (!restartTimer(callbackDhcpLeaseEndTimer))
-        startOneshotTimer(callbackDhcpLeaseEndTimer, leaseSeconds);
 }
 
 // Send DHCP message
@@ -321,32 +361,33 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             if (getDhcpState() == DHCP_REBINDING)
                 dhcp->flags = htons(0x8000); // Flags (Broadcast)
             else
-                dhcp->flags = htons(0x0); // Flags (Unicast)
+                dhcp->flags = htons(0x8000); // Flags (Unicast)
 
             // Store the server IP address
-            uint8_t *tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
+            tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
 
             for (i = 0; i < IP_ADD_LENGTH; i++)
             {
-                /*
                 if (getDhcpState() == DHCP_RENEWING)
-                    dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Server IP
-                */
-                // else
+                    dhcp->ciaddr[i] = dhcpOfferedIpAdd[i];  // Client IP
+                else
                     dhcp->ciaddr[i] = 0x0;  // Client IP
 
                 dhcp->yiaddr[i] = 0x0;  // Your IP
 
-                //if (getDhcpState() == DHCP_REBINDING)
-                    dhcp->siaddr[i] = 0x0;  // Server IP
-                /*
+                if (getDhcpState() == DHCP_REBINDING)
+                    dhcpServerIpAdd[i] = 0x0;  // Server IP
                 else
                 {
-                    dhcpServerIpAdd[i] = *tempServerIpAddPtr;
-                    dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
-                    tempServerIpAddPtr++;
+                    if (getDhcpState() == DHCP_SELECTING)
+                    {
+                        dhcpServerIpAdd[i] = *tempServerIpAddPtr;
+                        dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                        tempServerIpAddPtr++;
+                    }
+                    else
+                        dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
                 }
-                */
 
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
             }
@@ -595,6 +636,20 @@ void handleDhcpAck(etherHeader *ether)
     uint8_t *gwPtr = getDhcpOption(ether, 0x3, NULL);
     uint8_t *lsPtr = getDhcpOption(ether, 0x33, &leaseLen);
 
+    for (i = 0; i < 4; i++)
+    {
+        tempSub[i] = *subPtr;
+        tempDns[i] = *dnsPtr;
+        tempGw[i] = *gwPtr;
+        tempLs[i] = *lsPtr;
+
+        subPtr++;
+        dnsPtr++;
+        gwPtr++;
+        lsPtr++;
+    }
+
+    /*
     setIpAddress(dhcpOfferedIpAdd);
     setIpSubnetMask(subPtr);
     setIpGatewayAddress(gwPtr);
@@ -610,8 +665,10 @@ void handleDhcpAck(etherHeader *ether)
         leaseSeconds += (*lsPtr << (leaseLen - i));
         lsPtr++;
     }
+
     leaseT1 = leaseSeconds / 2;
     leaseT2 = (leaseSeconds * 7) / 8;
+    */
 }
 
 // Message requests
@@ -638,7 +695,7 @@ void sendDhcpPendingMessages(etherHeader *ether)
         case DHCP_INIT:
             if (isDhcpDiscoverNeeded())
             {
-                requestDhcpNewAddress();
+                // requestDhcpNewAddress();
                 sendDhcpMessage(ether, DHCPDISCOVER);
             }
             break;
@@ -646,7 +703,7 @@ void sendDhcpPendingMessages(etherHeader *ether)
             getEtherPacket(ether, MAX_PACKET_SIZE);
             if(isDhcpOffer(ether, dhcpOfferedIpAdd))
             {
-                stopTimer(callbackDhcpGetNewAddressTimer);
+                // stopTimer(callbackDhcpGetNewAddressTimer);
                 sendDhcpMessage(ether, DHCPREQUEST);
             }
             break;
@@ -666,6 +723,7 @@ void sendDhcpPendingMessages(etherHeader *ether)
                 }
                 else
                 {
+                    applyDhcpAckValues();
                     // immediately go to bound state if no detection needed
                     startDhcpTimers();
                     setDhcpState(DHCP_BOUND);
@@ -712,24 +770,42 @@ void processDhcpResponse(etherHeader *ether)
 
 void processDhcpArpResponse(etherHeader *ether)
 {
-    sendDhcpMessage(ether, DHCPDECLINE);
+    bool ok = false;
+    uint8_t *arpResponseSrc = (uint8_t *)ether + 28;
+    uint8_t i = 0;
+    uint8_t ipSimilar = 0;
 
-    uint8_t blank[4] = {0, 0, 0, 0};
+    for (i = 0; i < IP_ADD_LENGTH; i++)
+    {
+        if (*arpResponseSrc != dhcpOfferedIpAdd[i])
+        {
+            ok = true;
+            break;
+        }
+        arpResponseSrc++;
+    }
 
-    setIpAddress(blank);
-    setIpSubnetMask(blank);
-    setIpGatewayAddress(blank);
-    setIpDnsAddress(blank);
+    if (!ok)
+    {
+        sendDhcpMessage(ether, DHCPDECLINE);
 
-    leaseSeconds = 0;
-    leaseT1 = 0;
-    leaseT2 = 0;
+        uint8_t blank[4] = {0, 0, 0, 0};
 
-    discoverNeeded = true;
-    requestNeeded = false;
-    releaseNeeded = false;
+        setIpAddress(blank);
+        setIpSubnetMask(blank);
+        setIpGatewayAddress(blank);
+        setIpDnsAddress(blank);
 
-    setDhcpState(DHCP_INIT);
+        leaseSeconds = 0;
+        leaseT1 = 0;
+        leaseT2 = 0;
+
+        discoverNeeded = true;
+        requestNeeded = false;
+        releaseNeeded = false;
+
+        setDhcpState(DHCP_INIT);
+    }
 }
 
 // DHCP control functions
