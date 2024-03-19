@@ -52,6 +52,9 @@
 #define GREEN 2
 #define BLUE 3
 
+#define DEMO_CONFLICT_TIME 2
+#define DEMO_LEASESEC_TIME 60
+
 // ------------------------------------------------------------------------------
 //  Globals
 // ------------------------------------------------------------------------------
@@ -216,7 +219,7 @@ void applyDhcpAckValues()
     leaseSeconds = 0;
 
     // TODO: Change 30 to temp
-    leaseSeconds = 60;
+    leaseSeconds = DEMO_LEASESEC_TIME;
     leaseT1 = leaseSeconds / 2;
     leaseT2 = (leaseSeconds * 7) / 8;
 }
@@ -234,7 +237,7 @@ void requestDhcpIpConflictTest()
 {
     if (!restartTimer(callbackDhcpIpConflictWindow))
     {
-        startOneshotTimer(callbackDhcpIpConflictWindow, 5);
+        startOneshotTimer(callbackDhcpIpConflictWindow, DEMO_CONFLICT_TIME);
     }
     setDhcpState(DHCP_TESTING_IP);
 }
@@ -358,10 +361,10 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
         case DHCPREQUEST:
             dhcp->xid = htonl(xid); // Transaction ID
 
-            if (getDhcpState() == DHCP_REBINDING)
+            if (getDhcpState() == DHCP_REBINDING || getDhcpState() == DHCP_SELECTING)
                 dhcp->flags = htons(0x8000); // Flags (Broadcast)
             else
-                dhcp->flags = htons(0x8000); // Flags (Unicast)
+                dhcp->flags = htons(0x0000); // Flags (Unicast)
 
             // Store the server IP address
             tempServerIpAddPtr = getDhcpOption(ether, 0x36, NULL);
@@ -375,18 +378,16 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
                 dhcp->yiaddr[i] = 0x0;  // Your IP
 
-                if (getDhcpState() == DHCP_REBINDING)
-                    dhcpServerIpAdd[i] = 0x0;  // Server IP
+                if (getDhcpState() == DHCP_SELECTING)
+                {
+                    dhcpServerIpAdd[i] = *tempServerIpAddPtr;
+                    dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                    tempServerIpAddPtr++;
+                }
                 else
                 {
-                    if (getDhcpState() == DHCP_SELECTING)
-                    {
-                        dhcpServerIpAdd[i] = *tempServerIpAddPtr;
-                        dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
-                        tempServerIpAddPtr++;
-                    }
-                    else
-                        dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                    dhcp->siaddr[i] = 0x0;  // Server IP
+
                 }
 
                 dhcp->giaddr[i] = 0x0;  // Gateway IP
@@ -403,20 +404,32 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             *(optionsPtr++) = 0x1;  // Length: 1
             *(optionsPtr++) = 0x3;  // DHCP: Request (3)
 
-            *(optionsPtr++) = 0x32; // Option: (50) Requested IP Address
-            *(optionsPtr++) = 0x4;  // Length: 4
-            for (i = 0; i < IP_ADD_LENGTH; i++)
+            if (getDhcpState() == DHCP_RENEWING)
             {
-                *(optionsPtr++) = dhcpOfferedIpAdd[i];
+                *(optionsPtr++) = 0x32; // Option: (50) Requested IP Address
+                *(optionsPtr++) = 0x4;  // Length: 4
+                for (i = 0; i < IP_ADD_LENGTH; i++)
+                {
+                    *(optionsPtr++) = dhcpOfferedIpAdd[i];
+                }
             }
 
-            *(optionsPtr++) = 0x36; // Option: (54) DHCP Server Identifier
-            *(optionsPtr++) = 0x4;  // Length: 4
-            for (i = 0; i < IP_ADD_LENGTH; i++)
+            if (getDhcpState() == DHCP_SELECTING)
             {
-                *(optionsPtr++) = dhcpServerIpAdd[i];
-            }
+                *(optionsPtr++) = 0x32; // Option: (50) Requested IP Address
+                *(optionsPtr++) = 0x4;  // Length: 4
+                for (i = 0; i < IP_ADD_LENGTH; i++)
+                {
+                    *(optionsPtr++) = dhcpOfferedIpAdd[i];
+                }
 
+                *(optionsPtr++) = 0x36; // Option: (54) DHCP Server Identifier
+                *(optionsPtr++) = 0x4;  // Length: 4
+                for (i = 0; i < IP_ADD_LENGTH; i++)
+                {
+                    *(optionsPtr++) = dhcpServerIpAdd[i];
+                }
+            }
             *optionsPtr = 0xFF;     // Option End: 255
 
             setDhcpState(DHCP_REQUESTING);
@@ -618,7 +631,10 @@ bool isDhcpOffer(etherHeader *ether, uint8_t ipOfferedAdd[])
 // Must be a UDP packet
 bool isDhcpAck(etherHeader *ether)
 {
-    if (*getDhcpOption(ether, 0x35, NULL) == 5)
+    uint16_t src = ntohs(*(uint16_t *)((uint8_t *)ether + 34));
+    uint16_t dst = ntohs(*(uint16_t *)((uint8_t *)ether + 36));
+
+    if ((src == 67) && (dst == 68) && (*getDhcpOption(ether, 0x35, NULL) == 5))
         return true;
     else
         return false;

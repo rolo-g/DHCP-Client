@@ -460,10 +460,10 @@ void timerTest()
 
 int main(void)
 {
-    uint8_t* udpData;
-    uint8_t buffer[MAX_PACKET_SIZE];
-    etherHeader *data = (etherHeader*) buffer;
-    socket s;
+    volatile uint8_t* udpData;
+    volatile uint8_t buffer[MAX_PACKET_SIZE];
+    volatile etherHeader *data = (etherHeader*) buffer;
+    volatile socket s;
 
     // Init controller
     initHw();
