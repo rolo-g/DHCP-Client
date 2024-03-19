@@ -1,6 +1,8 @@
 /*
  * Modified DHCP (client) Library for CSE 4352 Project 1 & 2
  * Rolando Rosales 1001850424
+ *
+ * This code is really ugly
 */
 
 // DHCP Library
@@ -155,7 +157,7 @@ void callbackDhcpT1HitTimer()
 
 void callbackDhcpT2PeriodicTimer()
 {
-    requestNeeded = true;
+    releaseNeeded = true;
 }
 
 void rebindDhcp()
@@ -196,6 +198,7 @@ void callbackDhcpLeaseEndTimer()
 
 void releaseDhcp()
 {
+    releaseNeeded = true;
 }
 
 // T1, T2, and lease timer startup
@@ -218,7 +221,6 @@ void applyDhcpAckValues()
 
     leaseSeconds = 0;
 
-    // TODO: Change 30 to temp
     leaseSeconds = DEMO_LEASESEC_TIME;
     leaseT1 = leaseSeconds / 2;
     leaseT2 = (leaseSeconds * 7) / 8;
@@ -254,9 +256,9 @@ uint32_t getDhcpLeaseSeconds()
     return leaseSeconds;
 }
 
+// Not used because PendingMessages handles this
 // Determines whether packet is DHCP
 // Must be a UDP packet
-// TODO: Evaluate isDhcpResponse
 bool isDhcpResponse(etherHeader* ether)
 {
     bool ok;
@@ -436,7 +438,6 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
 
             break;
         case DHCPDECLINE:
-            // TODO: Test decline 
             dhcp->xid = htonl(xid); // Transaction ID
             dhcp->flags = htons(0x0); // Flags (Unicast)
 
@@ -479,7 +480,6 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             *optionsPtr = 0xFF;     // Option End: 255
             break;
         case DHCPRELEASE:
-            // TODO: Test release 
             dhcp->xid = htonl(xid); // Transaction ID
             dhcp->flags = htons(0x0); // Flags (Unicast)
 
@@ -524,7 +524,6 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
             
             break;
         case DHCPINFORM:
-            // TODO: Test inform
             dhcp->flags = htons(0x8000); // Flags (Broadcast)
             xid++;
             dhcp->xid = htonl(xid); // Transaction ID
@@ -706,79 +705,103 @@ bool isDhcpReleaseNeeded()
 
 void sendDhcpPendingMessages(etherHeader *ether)
 {
-    switch (dhcpState)
+    if (releaseNeeded)
     {
-        case DHCP_INIT:
-            if (isDhcpDiscoverNeeded())
-            {
-                // requestDhcpNewAddress();
-                sendDhcpMessage(ether, DHCPDISCOVER);
-            }
-            break;
-        case DHCP_SELECTING:
-            getEtherPacket(ether, MAX_PACKET_SIZE);
-            if(isDhcpOffer(ether, dhcpOfferedIpAdd))
-            {
-                // stopTimer(callbackDhcpGetNewAddressTimer);
-                sendDhcpMessage(ether, DHCPREQUEST);
-            }
-            break;
-        case DHCP_REQUESTING:
-            // TODO: Add ack response timer
-            getEtherPacket(ether, MAX_PACKET_SIZE);
-            if(isDhcpAck(ether))
-            {
-                handleDhcpAck(ether);
-                if(isDhcpIpConflictDetectionMode())
+        releaseNeeded = false;
+
+        sendDhcpMessage(ether, DHCPRELEASE);
+
+        uint8_t blank[4] = {0, 0, 0, 0};
+
+        setIpAddress(blank);
+        setIpSubnetMask(blank);
+        setIpGatewayAddress(blank);
+        setIpDnsAddress(blank);
+
+        leaseSeconds = 0;
+        leaseT1 = 0;
+        leaseT2 = 0;
+
+        discoverNeeded = true;
+        requestNeeded = false;
+        releaseNeeded = false;
+
+        setDhcpState(DHCP_INIT);
+    }
+    else
+    {
+        switch (dhcpState)
+        {
+            case DHCP_INIT:
+                if (isDhcpDiscoverNeeded())
                 {
-                    // sends ARP response to offered address
-                    uint8_t blankIp[4] = {0, 0, 0, 0};
-                    sendArpRequest(ether, blankIp, dhcpOfferedIpAdd);
-                    // starts the ip conflict test
-                    requestDhcpIpConflictTest();
+                    // requestDhcpNewAddress();
+                    sendDhcpMessage(ether, DHCPDISCOVER);
                 }
-                else
+                break;
+            case DHCP_SELECTING:
+                getEtherPacket(ether, MAX_PACKET_SIZE);
+                if(isDhcpOffer(ether, dhcpOfferedIpAdd))
                 {
-                    applyDhcpAckValues();
-                    // immediately go to bound state if no detection needed
-                    startDhcpTimers();
-                    setDhcpState(DHCP_BOUND);
+                    // stopTimer(callbackDhcpGetNewAddressTimer);
+                    sendDhcpMessage(ether, DHCPREQUEST);
                 }
-            }
-            break;
-        case DHCP_TESTING_IP:
-            // TODO: test testing state
-            getEtherPacket(ether, MAX_PACKET_SIZE);
-            if (isArpResponse(ether));
-            {
-                processDhcpArpResponse(ether);
-            }
-            break;
-        case DHCP_BOUND:
-            // Doesn't do anything, just waits for timers to hit
-            debugLed(BLUE);
-            break;
-        case DHCP_RENEWING:
-            if (isDhcpRequestNeeded())
-            {
-                requestNeeded = false;
-                sendDhcpMessage(ether, DHCPREQUEST);
-            }
-            break;
-        case DHCP_REBINDING:
-            if (isDhcpRequestNeeded())
-            {
-                requestNeeded = false;
-                sendDhcpMessage(ether, DHCPREQUEST);
-            }
-            break;
-        default:
-            break;
-    
+                break;
+            case DHCP_REQUESTING:
+                getEtherPacket(ether, MAX_PACKET_SIZE);
+                if(isDhcpAck(ether))
+                {
+                    handleDhcpAck(ether);
+                    if(isDhcpIpConflictDetectionMode())
+                    {
+                        // sends ARP response to offered address
+                        uint8_t blankIp[4] = {0, 0, 0, 0};
+                        sendArpRequest(ether, blankIp, dhcpOfferedIpAdd);
+                        // starts the ip conflict test
+                        requestDhcpIpConflictTest();
+                    }
+                    else
+                    {
+                        applyDhcpAckValues();
+                        // immediately go to bound state if no detection needed
+                        startDhcpTimers();
+                        setDhcpState(DHCP_BOUND);
+                    }
+                }
+                break;
+            case DHCP_TESTING_IP:
+                getEtherPacket(ether, MAX_PACKET_SIZE);
+                if (isArpResponse(ether));
+                {
+                    processDhcpArpResponse(ether);
+                }
+                break;
+            case DHCP_BOUND:
+                // Doesn't do anything, just waits for timers to hit
+                debugLed(BLUE);
+                break;
+            case DHCP_RENEWING:
+                if (isDhcpRequestNeeded())
+                {
+                    requestNeeded = false;
+                    sendDhcpMessage(ether, DHCPREQUEST);
+                }
+                break;
+            case DHCP_REBINDING:
+                if (isDhcpRequestNeeded())
+                {
+                    requestNeeded = false;
+                    sendDhcpMessage(ether, DHCPREQUEST);
+                }
+                break;
+            default:
+                break;
+
+        }
     }
 }
 
-// TODO: Evaluate processDhcpResponse
+// Not used because PendingMessages handles this
 // Could have split up pending message function, but too late now
 void processDhcpResponse(etherHeader *ether)
 {

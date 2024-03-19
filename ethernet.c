@@ -1,3 +1,8 @@
+/*
+ * Modified ethernet.c for CSE 4352 Project 1 & 2
+ * Rolando Rosales 1001850424
+*/
+
 // Ethernet Framework for Projects 1 and 2
 // Spring 2024
 // Jason Losh
@@ -493,6 +498,8 @@ int main(void)
     waitMicrosecond(100000);
 
     /*
+    // I just used all of this code to originally test my library
+
     // Testing from DHCP_DISCOVER to DHCP_ACK
     
     sendDhcpMessage(data, 1);
@@ -517,9 +524,7 @@ int main(void)
     // handleDhcpAck(data);
 
     while(true);
-    */
 
-    /*
     getEtherPacket(data, MAX_PACKET_SIZE);
     while(true)
     {
@@ -603,6 +608,7 @@ int main(void)
                             sendTcpResponse(data, &s, ACK | RST);
                     }
                 }
+            	// Removed since PendingMessages fn kinda does everything
             	// Handle DHCP response
                 // else
                 // {
