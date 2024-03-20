@@ -54,8 +54,8 @@
 #define GREEN 2
 #define BLUE 3
 
-#define DEMO_CONFLICT_TIME 2
-#define DEMO_LEASESEC_TIME 60
+#define DEMO_CONFLICT_TIME 1
+#define DEMO_LEASESEC_TIME 30
 
 // ------------------------------------------------------------------------------
 //  Globals
@@ -157,7 +157,7 @@ void callbackDhcpT1HitTimer()
 
 void callbackDhcpT2PeriodicTimer()
 {
-    releaseNeeded = true;
+    requestNeeded = true;
 }
 
 void rebindDhcp()
@@ -177,7 +177,13 @@ void callbackDhcpT2HitTimer()
 void callbackDhcpLeaseEndTimer()
 {
     uint8_t blank[4] = {0, 0, 0, 0};
+    uint8_t i = 0;
 
+    for (i = 0; i < IP_ADD_LENGTH; i++)
+    {
+        dhcpOfferedIpAdd[i] = 0x0;
+        dhcpServerIpAdd[i] = 0x0;
+    }
     setIpAddress(blank);
     setIpSubnetMask(blank);
     setIpGatewayAddress(blank);
@@ -190,6 +196,7 @@ void callbackDhcpLeaseEndTimer()
     discoverNeeded = true;
     requestNeeded = false;
     releaseNeeded = false;
+    receivedArpResp = true;
 
     setDhcpState(DHCP_INIT);
 }
@@ -388,7 +395,12 @@ void sendDhcpMessage(etherHeader *ether, uint8_t type)
                 }
                 else
                 {
-                    dhcp->siaddr[i] = 0x0;  // Server IP
+                    if (getDhcpState() == DHCP_RENEWING)
+                    {
+                        dhcp->siaddr[i] = dhcpServerIpAdd[i];  // Server IP
+                    }
+                    else
+                        dhcp->siaddr[i] = 0x0;  // Server IP
 
                 }
 
@@ -708,8 +720,15 @@ void sendDhcpPendingMessages(etherHeader *ether)
     if (releaseNeeded)
     {
         releaseNeeded = false;
+        uint8_t i = 0;
 
         sendDhcpMessage(ether, DHCPRELEASE);
+
+        for (i = 0; i < IP_ADD_LENGTH; i++)
+        {
+            dhcpOfferedIpAdd[i] = 0x0;
+            dhcpServerIpAdd[i] = 0x0;
+        }
 
         uint8_t blank[4] = {0, 0, 0, 0};
 
@@ -829,6 +848,12 @@ void processDhcpArpResponse(etherHeader *ether)
         sendDhcpMessage(ether, DHCPDECLINE);
 
         uint8_t blank[4] = {0, 0, 0, 0};
+
+        for (i = 0; i < IP_ADD_LENGTH; i++)
+        {
+            dhcpOfferedIpAdd[i] = 0x0;
+            dhcpServerIpAdd[i] = 0x0;
+        }
 
         setIpAddress(blank);
         setIpSubnetMask(blank);
