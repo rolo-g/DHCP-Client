@@ -497,41 +497,6 @@ int main(void)
     setPinValue(GREEN_LED, 0);
     waitMicrosecond(100000);
 
-    /*
-    // I just used all of this code to originally test my library
-
-    // Testing from DHCP_DISCOVER to DHCP_ACK
-    
-    sendDhcpMessage(data, 1);
-
-    while(!isDhcpOffer(data, NULL))
-    {
-        getEtherPacket(data, MAX_PACKET_SIZE);
-    }
-
-    setPinValue(BLUE_LED, 1);
-
-    sendDhcpMessage(data, 3);
-
-    while(!isDhcpAck(data))
-    {
-        getEtherPacket(data, MAX_PACKET_SIZE);
-    }
-
-    setPinValue(BLUE_LED, 0);
-    setPinValue(RED_LED, 1);
-
-    // handleDhcpAck(data);
-
-    while(true);
-
-    getEtherPacket(data, MAX_PACKET_SIZE);
-    while(true)
-    {
-        sendDhcpPendingMessages(data);
-    }
-    */
-
     // Main Loop
     // RTOS and interrupts would greatly improve this code,
     // but the goal here is simplicity
