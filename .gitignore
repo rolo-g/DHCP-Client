@@ -2,6 +2,7 @@
 .launches/
 .settings/
 Debug/
+targetConfigs/
 
 # VS Code
 .vscode/
