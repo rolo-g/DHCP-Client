@@ -3,6 +3,7 @@
 .settings/
 Debug/
 targetConfigs/
+Release/
 
 # VS Code
 .vscode/
